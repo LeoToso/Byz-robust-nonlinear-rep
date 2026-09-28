@@ -144,7 +144,3 @@ python -m py_compile core/*.py experiments/*.py scripts/*.py
 python -m pytest -q
 ```
 
-## Citation
-
-The arXiv identifier will be added after publication. Until then, please cite
-the bundled manuscript and this repository.
