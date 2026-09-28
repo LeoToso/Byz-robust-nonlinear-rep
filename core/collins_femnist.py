@@ -23,6 +23,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 
 from core.aggregators import ByzantineAttack, RobustAggregator
+from core.objectives import TaskObjective
 
 
 class ArrayDataset(Dataset):
@@ -175,6 +176,7 @@ class CollinsConfig:
     eval_every: int = 10
     seed: int = 42
     device: str = "cpu"
+    loss_type: str = "cross_entropy"
     official_softmax_ce: bool = True
 
 
@@ -189,6 +191,9 @@ class CollinsFEMNISTTrainer:
         torch.manual_seed(config.seed)
         if config.algorithm not in {"fedrep", "fedavg"}:
             raise ValueError("algorithm must be fedrep or fedavg")
+        if config.loss_type not in {"cross_entropy", "multiclass_ls"}:
+            raise ValueError(
+                "loss_type must be cross_entropy or multiclass_ls")
         if len(train_sets) != config.population_clients or len(test_sets) != config.population_clients:
             raise ValueError("partition size does not match population_clients")
         if not 1 <= config.honest_per_round <= config.population_clients:
@@ -200,11 +205,17 @@ class CollinsFEMNISTTrainer:
 
         self.train_sets, self.test_sets = list(train_sets), list(test_sets)
         self.device = torch.device(config.device)
-        self.global_model = CollinsMLP(config.official_softmax_ce).to(self.device)
+        use_softmax = (
+            config.official_softmax_ce
+            if config.loss_type == "cross_entropy"
+            else False
+        )
+        self.global_model = CollinsMLP(use_softmax).to(self.device)
         initial_head = copy.deepcopy(self.global_model.head.state_dict())
         self.client_heads = [copy.deepcopy(initial_head)
                              for _ in range(config.population_clients)]
-        self.criterion = nn.CrossEntropyLoss()
+        self.criterion = TaskObjective(
+            "classification", config.loss_type, 10)
         self.rng = np.random.default_rng(config.seed)
         self.robust_aggregator = None
         self.attack = None
@@ -328,7 +339,7 @@ class CollinsFEMNISTTrainer:
                           self.cfg.byzantine_per_round),
             "n_byzantine": self.cfg.byzantine_per_round,
             "alpha": None,
-            "loss_type": "cross_entropy",
+            "loss_type": self.cfg.loss_type,
             "algorithm": ("fedrep_nonlinear" if self.cfg.algorithm == "fedrep"
                           else "baseline"),
             "aggregator": self.cfg.aggregator,

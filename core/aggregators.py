@@ -213,6 +213,17 @@ class ByzantineAttack:
         if self.f == 0:
             return []
 
+        # Use one explicit ALIE definition with or without ByzFL:
+        # coordinatewise mean plus tau times population standard deviation.
+        if self.name == "ALIE":
+            stacked = torch.stack(honest)
+            tau = self.kw.get("tau", 1.5)
+            byz = (
+                stacked.mean(dim=0)
+                + tau * stacked.std(dim=0, unbiased=False)
+            )
+            return [byz.clone() for _ in range(self.f)]
+
         if _BFL and self._atk is not None:
             # ByzFL preserves torch tensors and their device, so the attack is
             # computed on GPU alongside training and robust aggregation.

@@ -46,6 +46,11 @@ def parse_args():
     parser.add_argument("--rounds", type=int, default=200)
     parser.add_argument("--eval_every", type=int, default=10)
     parser.add_argument("--honest_per_round", nargs="+", type=int, default=[10, 20, 50])
+    parser.add_argument(
+        "--loss_type",
+        choices=["cross_entropy", "multiclass_ls"],
+        default="cross_entropy",
+    )
     parser.add_argument("--byzantine_per_round", type=int, default=5)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--standard_logits", action="store_true",
@@ -82,7 +87,10 @@ def main():
             attack_tau=args.attack_tau,
             mimic_client=args.mimic_client,
             eval_every=args.eval_every, seed=seed, device=args.device,
-            official_softmax_ce=not args.standard_logits,
+            loss_type=args.loss_type,
+            official_softmax_ce=(
+                not args.standard_logits
+                if args.loss_type == "cross_entropy" else False),
         )
         path = output_path(args.output_dir, config)
         checkpoint_path = path.with_suffix(".pt")

@@ -181,6 +181,40 @@ def load_cifar10(n_clients, alpha, data_dir="./data", batch_size=64, seed=42):
            DataLoader(test_ds, batch_size=256, shuffle=False, num_workers=0)
 
 
+def collins_cifar10_class_pairs(seed: int = 42):
+    """Return the randomized balanced two-shard assignment from Collins et al.
+
+    CIFAR-10 has 200 single-class shards for the ``(n, S) = (100, 2)``
+    protocol: 20 shards from every class.  Randomly pair the shards while
+    rejecting same-class pairs so every client receives two distinct classes.
+    """
+    rng = np.random.default_rng(seed)
+    labels = rng.permutation(np.repeat(np.arange(10, dtype=np.int64), 20))
+    pairs = labels.reshape(100, 2).copy()
+    # Repair the rare same-class pairs by swapping their second endpoint with
+    # a compatible edge. This preserves exactly 20 shards from every class.
+    while True:
+        loops = np.flatnonzero(pairs[:, 0] == pairs[:, 1])
+        if not len(loops):
+            break
+        i = int(loops[0])
+        candidates = np.flatnonzero(
+            (pairs[:, 0] != pairs[:, 1]) &
+            (pairs[:, 1] != pairs[i, 0]) &
+            (pairs[:, 0] != pairs[i, 0])
+        )
+        if not len(candidates):
+            # This is extraordinarily unlikely; restart deterministically
+            # from the continuing RNG stream rather than accepting a loop.
+            labels = rng.permutation(labels)
+            pairs = labels.reshape(100, 2).copy()
+            continue
+        j = int(rng.choice(candidates))
+        pairs[i, 1], pairs[j, 1] = pairs[j, 1], pairs[i, 1]
+    order = rng.permutation(len(pairs))
+    return [tuple(map(int, pairs[index])) for index in order]
+
+
 def load_cifar10_collins(n_clients, alpha=None, data_dir="./data", batch_size=10, seed=42):
     """Collins et al.: 100 clients, two distinct classes and 500 train samples each."""
     if n_clients != 100:
@@ -194,9 +228,10 @@ def load_cifar10_collins(n_clients, alpha=None, data_dir="./data", batch_size=10
     for indices in train_by_class + test_by_class:
         rng.shuffle(indices)
     train_pos, test_pos, train_loaders, test_loaders = [0]*10, [0]*10, [], []
-    for client in range(100):
+    class_pairs = collins_cifar10_class_pairs(seed)
+    for client, labels in enumerate(class_pairs):
         train_idx, test_idx = [], []
-        for label in (client % 10, (client + 1) % 10):
+        for label in labels:
             train_idx.extend(train_by_class[label][train_pos[label]:train_pos[label]+250])
             test_idx.extend(test_by_class[label][test_pos[label]:test_pos[label]+50])
             train_pos[label] += 250; test_pos[label] += 50

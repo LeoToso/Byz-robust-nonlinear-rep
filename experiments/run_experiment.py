@@ -60,6 +60,7 @@ def run_experiment(
     global_probe: bool = False,
     checkpoint_path: str = None,
     head_optimizer: str = "sgd",
+    active_honest_clients: Optional[int] = None,
 ) -> ExperimentResult:
     """
     Full training loop for one experiment configuration.
