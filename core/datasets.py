@@ -73,9 +73,66 @@ def load_school(n_clients, alpha, data_dir="data", batch_size=32, seed=42):
     if not os.path.exists(mat_path):
         urlretrieve("https://raw.githubusercontent.com/jiayuzhou/MALSAR/master/data/school.mat", mat_path)
     raw = loadmat(mat_path)
-    X = np.asarray(raw["X"], dtype=np.float32); y = np.asarray(raw["Y"], dtype=np.float32).reshape(-1)
-    if X.shape[0] != len(y) and X.shape[1] == len(y): X = X.T
-    ranges = _school_task_ranges(raw["task_indexes"], len(y))
+    if raw["X"].dtype == object or raw["Y"].dtype == object:
+        x_cells = raw["X"].reshape(-1)
+        y_cells = raw["Y"].reshape(-1)
+        if len(x_cells) != len(y_cells):
+            raise ValueError(
+                "School X and Y cell arrays have different lengths"
+            )
+
+        x_parts, y_parts, ranges = [], [], []
+        offset = 0
+
+        for client_id, (x_cell, y_cell) in enumerate(
+            zip(x_cells, y_cells)
+        ):
+            x_i = np.asarray(x_cell, dtype=np.float32)
+            y_i = np.asarray(y_cell, dtype=np.float32).reshape(-1)
+
+            if x_i.ndim != 2:
+                raise ValueError(
+                    f"School {client_id} X has shape {x_i.shape}"
+                )
+
+            if (
+                x_i.shape[0] != len(y_i)
+                and x_i.shape[1] == len(y_i)
+            ):
+                x_i = x_i.T
+
+            if x_i.shape[0] != len(y_i):
+                raise ValueError(
+                    f"School {client_id} has incompatible "
+                    f"X={x_i.shape}, Y={y_i.shape}"
+                )
+
+            x_parts.append(x_i)
+            y_parts.append(y_i)
+            ranges.append((offset, offset + len(y_i)))
+            offset += len(y_i)
+
+        X = np.concatenate(x_parts, axis=0)
+        y = np.concatenate(y_parts, axis=0)
+
+    else:
+        X = np.asarray(raw["X"], dtype=np.float32)
+        y = np.asarray(raw["Y"], dtype=np.float32).reshape(-1)
+
+        if X.shape[0] != len(y) and X.shape[1] == len(y):
+            X = X.T
+
+        if X.shape[0] != len(y):
+            raise ValueError(
+                f"Incompatible School shapes X={X.shape}, Y={y.shape}"
+            )
+
+        if "task_indexes" not in raw:
+            raise KeyError(
+                "Dense school.mat is missing variable 'task_indexes'"
+            )
+
+        ranges = _school_task_ranges(raw["task_indexes"], len(y))
     if len(ranges) < n_clients: raise ValueError(f"Requested {n_clients} schools, found {len(ranges)}")
     rng = np.random.default_rng(seed); chosen = sorted(rng.choice(len(ranges), n_clients, replace=False).tolist())
     splits, all_train = [], []
