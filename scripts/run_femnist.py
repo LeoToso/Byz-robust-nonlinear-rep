@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the clean Collins FEMNIST calibration or its Byzantine extension."""
+"""Run the clean paper FEMNIST calibration or its Byzantine extension."""
 
 from __future__ import annotations
 
@@ -15,17 +15,17 @@ import torch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from core.collins_femnist import (CollinsConfig, CollinsFEMNISTTrainer,
-                                  load_collins_partition)
+from core.femnist_experiment import (FEMNISTConfig, FEMNISTTrainer,
+                                  load_femnist_partition)
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--partition", default="data/femnist_collins")
-    parser.add_argument("--output_dir", default="results/femnist_collins")
+    parser.add_argument("--partition", default="data/femnist_partition")
+    parser.add_argument("--output_dir", default="results/femnist")
     parser.add_argument("--mode", choices=["clean", "robust"], required=True)
-    parser.add_argument("--algorithms", nargs="+", choices=["fedavg", "fedrep"],
-                        default=["fedavg", "fedrep"])
+    parser.add_argument("--algorithms", nargs="+", choices=["baseline", "representation_learning"],
+                        default=["baseline", "representation_learning"])
     parser.add_argument("--aggregators", nargs="+",
                         default=["NNM+TrMean", "NNM+Krum"])
     parser.add_argument(
@@ -42,7 +42,7 @@ def parse_args():
         help="Zero-based honest client position copied by Mimic (default: 0)",
     )
     parser.add_argument("--seeds", nargs="+", type=int,
-                        default=[42, 123, 456, 789, 1024])
+                        default=[42, 123, 456])
     parser.add_argument("--rounds", type=int, default=200)
     parser.add_argument("--eval_every", type=int, default=10)
     parser.add_argument("--honest_per_round", nargs="+", type=int, default=[10, 20, 50])
@@ -53,13 +53,11 @@ def parse_args():
     )
     parser.add_argument("--byzantine_per_round", type=int, default=5)
     parser.add_argument("--device", default="cpu")
-    parser.add_argument("--standard_logits", action="store_true",
-                        help="Use logits with CE instead of the released code's softmax-before-CE")
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args()
 
 
-def output_path(root: str, config: CollinsConfig) -> Path:
+def output_path(root: str, config: FEMNISTConfig) -> Path:
     attack = config.attack if config.byzantine_per_round else "None"
     return (Path(root) / f"honest_{config.honest_per_round}" /
             config.algorithm / config.aggregator / attack /
@@ -68,9 +66,9 @@ def output_path(root: str, config: CollinsConfig) -> Path:
 
 def main():
     args = parse_args()
-    train_sets, test_sets, metadata = load_collins_partition(args.partition)
+    train_sets, test_sets, metadata = load_femnist_partition(args.partition)
     if metadata["n_clients"] != 150 or metadata["n_classes"] != 10:
-        raise ValueError("This runner requires the 150-client, 10-class Collins partition")
+        raise ValueError("This runner requires the 150-client, 10-class paper partition")
 
     if args.mode == "clean":
         grid = itertools.product(args.honest_per_round, args.algorithms, ["Average"], ["SignFlipping"], args.seeds)
@@ -80,7 +78,7 @@ def main():
         byzantine = args.byzantine_per_round
 
     for honest_per_round, algorithm, aggregator, attack, seed in grid:
-        config = CollinsConfig(
+        config = FEMNISTConfig(
             algorithm=algorithm, rounds=args.rounds,
             honest_per_round=honest_per_round,
             byzantine_per_round=byzantine, aggregator=aggregator, attack=attack,
@@ -88,9 +86,7 @@ def main():
             mimic_client=args.mimic_client,
             eval_every=args.eval_every, seed=seed, device=args.device,
             loss_type=args.loss_type,
-            official_softmax_ce=(
-                not args.standard_logits
-                if args.loss_type == "cross_entropy" else False),
+            official_softmax_ce=False,
         )
         path = output_path(args.output_dir, config)
         checkpoint_path = path.with_suffix(".pt")
@@ -98,7 +94,7 @@ def main():
             print(f"skip {path}")
             continue
         print(f"run {path}", flush=True)
-        trainer = CollinsFEMNISTTrainer(config, train_sets, test_sets)
+        trainer = FEMNISTTrainer(config, train_sets, test_sets)
         result = trainer.run()
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_suffix(".tmp")

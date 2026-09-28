@@ -1,229 +1,149 @@
-# Experiments
+# Byzantine-Robust Federated Representation Learning
 
-This repository implements the two empirical settings in the paper draft:
+Code and artifacts for **Byzantine-Robust Federated Representation Learning**.
+The method learns a shared nonlinear representation through robust aggregation
+while retaining a personalized linear head for every client. The baseline
+robustly aggregates updates to one common model.
 
-1. `baseline`: adversarial federated learning with one shared predictor.
-2. `fedrep_nonlinear`: a shared nonlinear representation and private linear
-   client heads. Heads are fitted locally before the independent backbone
-   gradient batch, and only backbone gradients are robustly aggregated.
+- [Paper](paper/byzantine_robust_federated_representation_learning.pdf)
+- [FEMNIST client-scaling figure](figures/femnist_cross_entropy.pdf)
 
-## Experiment grid
-
-- Datasets: CIFAR-10, natural-writer LEAF FEMNIST, and the ILEA School Exam
-  Score regression dataset.
-- Classification objectives: cross entropy and the paper's multiclass squared
-  loss, `mean(||one_hot(y) - scores||_2^2)`, without softmax.
-- Regression objective: mean scalar squared error.
-- Default grid aggregators: NNM+TrMean and NNM+Krum.
-- Attacks: Sign Flipping and Inner Product Manipulation.
-- Algorithms: baseline and nonlinear FedRep.
-- Default seeds: 42, 123, 456, 789, and 1024.
-
-## Data preparation
-
-CIFAR-10 is downloaded by torchvision.
-
-For FEMNIST, generate or download the LEAF FEMNIST train/test JSON files and
-place them under:
-
-```text
-data/femnist/train/*.json
-data/femnist/test/*.json
-```
-
-Train and test records are matched by writer ID. A deterministic subset of
-writers is selected for each seed. LEAF uses a fixed 62-class output space,
-even when the selected training writers omit some labels. The separate legacy
-EMNIST-Letters proxy uses 26 outputs. LEAF pixels must already be scaled to
-[0, 1]; the loader validates shapes, finite pixels, and labels before normalizing.
-
-The School loader downloads the canonical `school.mat` file from the MALSAR
-repository into `data/school/` on first use. Each school is one natural client.
-All 139 school tasks are used by default, together with 35 simulated Byzantine
-workers.
-
-## Running
-
-Install dependencies:
+## Installation
 
 ```bash
-python -m pip install -r requirements.txt
+git clone https://github.com/LeoToso/adversarial-FL-nonlinear-rep.git
+cd adversarial-FL-nonlinear-rep
+conda create -n byzantine_rep python=3.10 -y
+conda activate byzantine_rep
+pip install -r requirements.txt
 ```
 
-Run one dataset's complete five-seed grid:
+All commands below run from the repository root. Use `--device cuda` when a
+CUDA GPU is available. Existing JSON/checkpoint pairs are skipped unless
+`--overwrite` is supplied.
+
+## Data
+
+### CIFAR-10
+
+`scripts/run_cifar10.py` downloads CIFAR-10 automatically and constructs 100
+clients with two classes, 500 training images, and 100 test images per client.
+
+### FEMNIST
+
+Download the preprocessed LEAF FEMNIST JSON files into `data/femnist/{train,test}`,
+then construct the 150-client, ten-letter partition:
 
 ```bash
-bash scripts/run_cifar10.sh --device cuda
-bash scripts/run_femnist_leaf.sh --device cuda
-bash scripts/run_school.sh --device cuda
+python scripts/prepare_femnist.py \
+  --leaf_dir data/femnist \
+  --output_dir data/femnist_partition \
+  --published_compatibility
 ```
 
-For a quick one-seed smoke run:
+### School Exam
+
+The School Exam file is downloaded automatically from the MALSAR repository.
+Each of the 139 schools is one client; each run samples 20 honest schools per
+round and appends five Byzantine updates.
+
+## Reproduce Table 1: classification
+
+Cross-entropy (baseline and representation learning):
 
 ```bash
-python scripts/run_paper_experiments.py \
-  --datasets cifar10 --seeds 42 --rounds 2 --eval_every 1
+python scripts/run_cifar10.py --mode robust \
+  --loss_types cross_entropy \
+  --honest_per_round 50 \
+  --algorithms baseline representation_learning \
+  --aggregators NNM+Krum NNM+TrMean \
+  --attacks ALIE Mimic --seeds 42 123 456 --device cuda
+
+python scripts/run_femnist.py --mode robust \
+  --partition data/femnist_partition \
+  --loss_type cross_entropy \
+  --honest_per_round 50 \
+  --algorithms baseline representation_learning \
+  --aggregators NNM+Krum NNM+TrMean \
+  --attacks ALIE Mimic --seeds 42 123 456 --device cuda
 ```
 
-Preview the grid without loading PyTorch or any datasets:
+Multiclass squared loss (representation learning):
 
 ```bash
-python scripts/run_paper_experiments.py --seeds 42 --dry_run
+python scripts/run_cifar10.py --mode robust \
+  --loss_types multiclass_ls --honest_per_round 50 \
+  --algorithms representation_learning \
+  --aggregators NNM+Krum NNM+TrMean \
+  --attacks ALIE Mimic --seeds 42 123 456 --device cuda
+
+python scripts/run_femnist.py --mode robust \
+  --partition data/femnist_partition --loss_type multiclass_ls \
+  --honest_per_round 50 --algorithms representation_learning \
+  --aggregators NNM+Krum NNM+TrMean \
+  --attacks ALIE Mimic --seeds 42 123 456 --device cuda
 ```
 
-Completed configurations are skipped unless `--overwrite` is supplied.
+| Dataset | Loss | Method | Krum/ALIE | Krum/Mimic | TrMean/ALIE | TrMean/Mimic |
+|---|---|---|---:|---:|---:|---:|
+| CIFAR-10 | Cross-entropy | Baseline | 50.46 ± 0.57 | 46.39 ± 1.76 | 50.46 ± 0.71 | 47.17 ± 1.58 |
+| CIFAR-10 | Cross-entropy | Rep. learning | **88.79 ± 0.42** | **88.50 ± 0.59** | **88.76 ± 0.44** | **88.54 ± 0.61** |
+| CIFAR-10 | Multiclass | Rep. learning | 88.33 ± 0.53 | 87.95 ± 0.51 | 88.42 ± 0.52 | 87.89 ± 0.60 |
+| FEMNIST | Cross-entropy | Baseline | 72.95 ± 1.95 | 70.34 ± 1.23 | 73.09 ± 2.03 | 70.66 ± 1.47 |
+| FEMNIST | Cross-entropy | Rep. learning | 91.89 ± 0.31 | 92.43 ± 0.15 | 92.02 ± 0.28 | 92.51 ± 0.07 |
+| FEMNIST | Multiclass | Rep. learning | **93.56 ± 0.24** | **93.60 ± 0.07** | **93.57 ± 0.22** | **93.67 ± 0.13** |
 
-## Results
+Entries are mean local test accuracy (%) ± sample standard deviation over seeds
+42, 123, and 456. Classification results average the final ten rounds.
 
-Every configuration/seed is saved independently under:
+## Reproduce Figure 1: FEMNIST client scaling
 
-```text
-results/paper/<dataset>/<loss>/<algorithm>/<aggregator>/<attack>/seed_<seed>.json
-```
-
-Each file contains:
-
-- `train_history`: training objective at every communication round;
-- `history`: held-out objective and accuracy/MSE at evaluation rounds;
-- the complete dataset, loss, algorithm, attack, aggregation, and seed metadata.
-
-Generate mean and one-standard-deviation loss curves across seeds with:
+Run the adversarial curves and the no-attack reference:
 
 ```bash
-python scripts/plot_paper_losses.py
+python scripts/run_femnist.py --mode robust \
+  --partition data/femnist_partition --loss_type cross_entropy \
+  --honest_per_round 10 20 50 \
+  --algorithms baseline representation_learning \
+  --aggregators NNM+Krum NNM+TrMean --attacks Mimic \
+  --seeds 42 123 456 --device cuda
+
+python scripts/run_femnist.py --mode clean \
+  --partition data/femnist_partition --loss_type cross_entropy \
+  --honest_per_round 50 \
+  --algorithms baseline representation_learning \
+  --seeds 42 123 456 --device cuda
 ```
 
-Plots are saved as PDF and PNG under `results/paper_figures/`.
+The publication-ready figure is included at
+`figures/femnist_cross_entropy.pdf`.
 
-## Correctness checks and FEMNIST diagnostics
-
-Run the offline regression tests (no datasets or GPU required):
+## Reproduce Table 2: School Exam
 
 ```bash
-python -m unittest discover -s tests -v
+python scripts/run_school.py --device cuda \
+  --seeds 42 123 456 \
+  --algorithms baseline representation_learning \
+  --aggregators NNM+Krum NNM+TrMean \
+  --attacks ALIE Mimic
 ```
 
-The alternating FedRep phases clear stale gradients and clip only the active
-head or backbone parameters. CIFAR-10/100 personalized held-out subsets use
-deterministic transforms, while training retains random crops and flips.
-These held-out subsets are still drawn from the training partition; they are
-not the official CIFAR test set. The optional global probe remains separate.
+| Method | Krum/ALIE | Krum/Mimic | TrMean/ALIE | TrMean/Mimic |
+|---|---:|---:|---:|---:|
+| Baseline | 0.7611 ± 0.0452 | 0.6532 ± 0.0201 | 0.7672 ± 0.0465 | 0.6531 ± 0.0226 |
+| Rep. learning | **0.6324 ± 0.0272** | **0.6300 ± 0.0276** | **0.6316 ± 0.0275** | **0.6301 ± 0.0276** |
 
-Before another full FEMNIST grid, run a data check, a fixed-training-batch fit
-(a diagnostic using Adam, not the federated optimizer), and clean f=0
-baseline/FedRep experiments for both objectives:
+Constant-predictor sanity checks are `0.9913 ± 0.0306` for the pooled training
+mean and `0.8826 ± 0.0263` for the per-school training mean. Lower MSE is better.
+
+## Tests
 
 ```bash
-CUDA_VISIBLE_DEVICES=1 python scripts/diagnose_femnist.py \
-  --device cuda --seed 42 --rounds 100 \
-  --output_dir results/femnist_diagnostics_v2
+python -m py_compile core/*.py experiments/*.py scripts/*.py
+python -m pytest -q
 ```
 
-The clean runs use the same ten writers, representation size, and federated
-learning rates as the paper grid, but no Byzantine vectors and simple averaging.
-The script stops if the fixed-batch fit fails to reach 95% training accuracy;
-this is a debugging gate, not a promised held-out accuracy. Use `--mode data`,
-`--mode overfit`, or `--mode clean` to run stages separately. Each invocation
-requires a fresh output directory and preserves previous results. JSON logs and
-final clean-run checkpoints are saved there. This does not add validation-based
-checkpoint selection or resumable training checkpoints.
+## Citation
 
-Keep all pre-fix results in their original directories. Use new directories for
-corrected runs: the gradient update and CIFAR evaluation protocol have changed,
-so their old and new results must not be pooled into a single five-seed summary.
-
-For the next training-only optimization diagnostic:
-
-```bash
-CUDA_VISIBLE_DEVICES=1 python scripts/diagnose_femnist_optimization.py \
-  --device cuda --seed 42 --rounds 100 --probe_steps 200 \
-  --output_dir results/femnist_optimization_v3
-```
-
-This compares 10 versus 50 head steps for both losses, leaving other trainer
-settings unchanged. It records raw backbone gradient norms, server update norms,
-and per-writer training prediction histograms. At the end, copies of each head
-are fitted with SGD and Adam on cached, dropout-free training features. These
-full-writer probes differ from minibatch federated training and do not guarantee
-linear separability or generalization. Test metrics are not used for selection.
-Each case saves incremental JSON diagnostics and a final model (not a resumable
-checkpoint). The script refuses an existing output seed directory. GPU gradient
-instrumentation adds synchronization overhead; do not use its timing as a speed
-benchmark. Production trainers and previous results are not modified.
-
-The follow-up head-phase ablation isolates dropout and optimizer choice:
-
-```bash
-CUDA_VISIBLE_DEVICES=1 python scripts/diagnose_femnist_head_ablation.py \
-  --device cuda --seed 42 --rounds 100 \
-  --output_dir results/femnist_head_ablation_v4
-```
-
-Three clean multiclass-LS cases use 50 head steps: SGD with dropout, SGD without
-head-phase dropout, and Adam without head-phase dropout. All use head LR 0.01,
-batch size 32, clipping norm 1, and fresh optimizer state each round. Backbone
-dropout, LR 0.1, and momentum 0.9 are unchanged. This is an equal-LR optimizer
-comparison, not tuned Adam. Minibatch order is matched across cases independently
-of dropout's random-number consumption. Per-writer head losses and prediction
-histograms are measured without dropout before/after fitting, before the server
-backbone update; they are training metrics, not held-out performance. JSON is
-saved each round, and a non-resumable final model is saved for each case.
-This separate diagnostic does not change production FedRep. Its explicit RNG
-control means it need not reproduce earlier diagnostic trajectories exactly.
-
-To compare SGD (head LR 0.01), reset Adam (0.001), and persistent per-client
-Adam (0.001), all with dropout enabled and 50 head steps:
-
-```bash
-CUDA_VISIBLE_DEVICES=1 python scripts/diagnose_femnist_optimizer_state.py \
-  --device cuda --seed 42 --rounds 100 \
-  --output_dir results/femnist_optimizer_state_v5
-```
-
-This clean, single-seed multiclass-LS diagnostic matches minibatch order and
-initialization. It saves head-fitting diagnostics every round and read-only
-training/held-out metrics every 10 rounds (also the last round), measured after
-the server update and averaged equally across writers. The held-out data are
-the LEAF test split, not a new validation split: these are exploratory results,
-not an unbiased final evaluation after hyperparameter selection. There is no
-automatic best-checkpoint selection or early stopping. Each case saves JSON
-and a final model; persistent Adam states are included, but missing RNG and
-backbone momentum prevent exact training resumption. Existing output seed
-directories are refused, and production FedRep is unchanged.
-
-## Provisional overnight FEMNIST grid
-
-```bash
-bash scripts/run_femnist_overnight.sh
-```
-
-Activate the experiment environment and run inside tmux. The launcher defaults
-to GPU 1 and first runs 16 two-round smoke cases (one seed, every combination).
-Only after all succeed does it launch 80 full cases: two losses, two algorithms,
-two aggregators, two attacks, five seeds. Every full case runs 200 rounds,
-evaluated every 10. Ten natural honest writers plus five Byzantine workers are
-used per seed. FedRep uses reset Adam for its private heads (LR 0.001, 50 steps);
-the baseline's SGD update is unchanged. Both use the same architecture and
-server LR 0.1, constant schedule, momentum 0.9, and batch size 32. Dropout stays
-enabled during training. Existing entry points still default to SGD heads.
-
-This is provisional: support for Adam came from clean, single-seed least-squares
-diagnostics, not cross-entropy or attacked runs. The grid changes head optimizer,
-head LR and head steps versus old runs; do not pool results with older grids or
-describe this as a controlled optimizer-only comparison. The head optimizer is
-an empirical implementation choice, not a newly established paper guarantee.
-
-Outputs go to results/femnist_adam_reset_v6; each case has JSON curves, explicit
-run configuration, source revision and a final model (not resumable optimizer
-state). A manifest prevents mixing revisions or configurations when restarting.
-Restarting skips completed configurations, not partially completed rounds.
-Full-run failures are recorded in failures.json and remaining cases continue;
-any failure yields a nonzero exit status and prevents automatic summary tables.
-Successful completion generates mean/std tables. Smoke tests fail immediately
-on error. Logs append on restart; previous experiment directories are untouched.
-Runtime depends on GPU contention and head fitting; overnight completion is not
-guaranteed. Preview the grid with:
-
-```bash
-python scripts/run_femnist_overnight.py --output_dir results/femnist_adam_reset_v6 --dry_run
-```
+The arXiv identifier will be added after publication. Until then, please cite
+the bundled manuscript and this repository.

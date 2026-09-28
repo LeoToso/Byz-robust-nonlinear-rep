@@ -6,7 +6,7 @@ aggregation, i.e. Algorithm 3 from Allouah et al. (AISTATS 2023).
 
 All parameters (backbone + head) form a single flat vector that is
 broadcast to clients, differentiated locally, and robustly aggregated
-server-side.  This is the BASELINE against which FedRep is compared.
+server-side.  This is the BASELINE against which RepresentationLearningTrainer is compared.
 
 Algorithm per round t
 ─────────────────────
@@ -32,7 +32,7 @@ from core.datasets    import DATASET_META
 from core.objectives  import TaskObjective, evaluate_model
 
 
-class FedBaseline:
+class BaselineTrainer:
     """
     Adversarial FL with a single shared global model (backbone + head).
 
@@ -135,7 +135,7 @@ class FedBaseline:
                     f"at round {self.round + 1}: {loss.item()}"
                 )
             loss.backward()
-            # Match the bounded-gradient treatment used by nonlinear FedRep
+            # Match the bounded-gradient treatment used by nonlinear RepresentationLearningTrainer
             # and prevent adversarial momentum from driving the CNN outside
             # the numerically stable regime.
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)

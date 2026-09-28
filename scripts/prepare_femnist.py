@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Create the 10-letter, 150-client FEMNIST partition of Collins et al.
+"""Create the 10-letter, 150-client FEMNIST partition of paper et al.
 
 The source is an already-preprocessed LEAF FEMNIST corpus.  Train and test
-files are pooled because Collins et al. repartition the underlying examples,
+files are pooled because paper et al. repartition the underlying examples,
 then a new 90/10 client-specific split is produced.  Sampling is without
 replacement; the published generator accidentally reused examples, so this
 script records the clean correction explicitly in metadata.
@@ -21,7 +21,7 @@ import numpy as np
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--leaf_dir", default="data/femnist")
-    parser.add_argument("--output_dir", default="data/femnist_collins")
+    parser.add_argument("--output_dir", default="data/femnist_partition")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--n_clients", type=int, default=150)
     parser.add_argument("--classes_per_client", type=int, default=3)
@@ -200,7 +200,7 @@ def main():
     }
     reused_total = int(sum(reused_by_class.values()))
     metadata = {
-        "benchmark": "collins21_femnist_letters",
+        "benchmark": "paper21_femnist_letters",
         "n_clients": args.n_clients,
         "n_classes": 10,
         "original_labels": list(range(36, 46)),
@@ -222,7 +222,7 @@ def main():
         "note": (
             "Published-compatible sample statistics with explicitly recorded "
             "class-pool cycling" if args.published_compatibility else
-            "Clean no-overlap implementation of Collins et al. 10-letter protocol"
+            "Clean no-overlap implementation of paper et al. 10-letter protocol"
         ),
     }
     with (output / "metadata.json").open("w") as stream:

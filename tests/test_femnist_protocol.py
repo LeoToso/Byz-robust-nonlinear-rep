@@ -3,7 +3,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from core.collins_femnist import ArrayDataset, CollinsConfig, CollinsFEMNISTTrainer, CollinsMLP
+from core.femnist_experiment import ArrayDataset, FEMNISTConfig, FEMNISTTrainer, FEMNISTMLP
 from core.aggregators import ByzantineAttack
 
 
@@ -11,8 +11,8 @@ def test_capacity_fitting_preserves_minimum_and_class_balance():
     import importlib.util
     from pathlib import Path
 
-    script = Path(__file__).parents[1] / "scripts" / "prepare_collins_femnist.py"
-    spec = importlib.util.spec_from_file_location("prepare_collins_femnist", script)
+    script = Path(__file__).parents[1] / "scripts" / "prepare_femnist.py"
+    spec = importlib.util.spec_from_file_location("prepare_femnist", script)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
@@ -75,7 +75,7 @@ def tiny_partition(n=4):
 
 
 def test_official_model_split():
-    model = CollinsMLP()
+    model = FEMNISTMLP()
     linears = [module for module in model.modules()
                if isinstance(module, torch.nn.Linear)]
     assert [(m.in_features, m.out_features) for m in linears] == [
@@ -85,18 +85,18 @@ def test_official_model_split():
 
 def test_clean_protocol_rejects_robust_aggregator():
     train, test = tiny_partition()
-    cfg = CollinsConfig(population_clients=4, honest_per_round=2,
+    cfg = FEMNISTConfig(population_clients=4, honest_per_round=2,
                         aggregator="NNM+TrMean", byzantine_per_round=0)
     with pytest.raises(ValueError, match="must use Average"):
-        CollinsFEMNISTTrainer(cfg, train, test)
+        FEMNISTTrainer(cfg, train, test)
 
 
 def test_short_clean_run_has_final_round_records():
     train, test = tiny_partition()
-    cfg = CollinsConfig(algorithm="fedrep", rounds=2,
+    cfg = FEMNISTConfig(algorithm="representation_learning", rounds=2,
                         population_clients=4, honest_per_round=2,
                         head_epochs=1, representation_epochs=1,
                         batch_size=2, eval_every=1, official_softmax_ce=False)
-    result = CollinsFEMNISTTrainer(cfg, train, test).run()
+    result = FEMNISTTrainer(cfg, train, test).run()
     assert [record["round"] for record in result["history"]] == [1, 2]
     assert result["reporting_rule"].startswith("unweighted client mean")

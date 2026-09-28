@@ -34,7 +34,7 @@ class ExperimentResult:
     alpha:       float        # Dirichlet heterogeneity
     aggregator:  str
     attack:      str
-    algorithm:   str          # "baseline" | "fedrep_linear" | "fedrep_nonlinear"
+    algorithm:   str          # "baseline" | "representation_learning_linear" | "representation_learning"
     repr_dim:    int
     head_steps:  int
     seed:        int

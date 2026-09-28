@@ -1,11 +1,11 @@
 """
-fed_fedrep.py  —  Adversarial Federated Representation Learning
+fed_representation_learning.py  —  Adversarial Federated Representation Learning
 ================================================================
 Implements the algorithm from:
   "Heterogeneity is Not Fundamental in Robust Federated Feature Learning"
   (Zhang, Toso, Anderson, Matni)
 
-which extends FedRep (Collins et al., ICML 2021) to the Byzantine-resilient
+which extends RepresentationLearningTrainer (paper et al., ICML 2021) to the Byzantine-resilient
 setting via alternating minimisation + robust aggregation on the representation
 (backbone) coordinate only.
 
@@ -48,7 +48,7 @@ from core.datasets    import DATASET_META
 from core.objectives  import TaskObjective, evaluate_model
 
 
-class FedRep:
+class RepresentationLearningTrainer:
     """
     Adversarial federated representation learning.
 

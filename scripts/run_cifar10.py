@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run Collins CIFAR-10 or its Byzantine client-scaling extension."""
+"""Run paper CIFAR-10 or its Byzantine client-scaling extension."""
 
 from __future__ import annotations
 
@@ -15,17 +15,17 @@ import torch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from core.collins_cifar10 import CollinsCIFAR10Config, CollinsCIFAR10Trainer
-from core.datasets import load_cifar10_collins
+from core.cifar10_experiment import CIFAR10Config, CIFAR10Trainer
+from core.datasets import load_paper_cifar10
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data_dir", default="data")
-    parser.add_argument("--output_dir", default="results/cifar10_collins")
+    parser.add_argument("--output_dir", default="results/cifar10")
     parser.add_argument("--mode", choices=["clean", "robust"], required=True)
-    parser.add_argument("--algorithms", nargs="+", choices=["fedavg", "fedrep"],
-                        default=["fedavg", "fedrep"])
+    parser.add_argument("--algorithms", nargs="+", choices=["baseline", "representation_learning"],
+                        default=["baseline", "representation_learning"])
     parser.add_argument("--aggregators", nargs="+",
                         default=["NNM+TrMean", "NNM+Krum"])
     parser.add_argument("--attacks", nargs="+", choices=["ALIE", "Mimic"],
@@ -36,7 +36,7 @@ def parse_args():
     parser.add_argument("--attack_tau", type=float, default=1.5)
     parser.add_argument("--mimic_client", type=int, default=0)
     parser.add_argument("--seeds", nargs="+", type=int,
-                        default=[42, 123, 456, 789, 1024])
+                        default=[42, 123, 456])
     parser.add_argument("--rounds", type=int, default=100)
     parser.add_argument("--eval_every", type=int, default=10)
     parser.add_argument("--honest_per_round", nargs="+", type=int,
@@ -47,7 +47,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def output_path(root: str, config: CollinsCIFAR10Config) -> Path:
+def output_path(root: str, config: CIFAR10Config) -> Path:
     attack = config.attack if config.byzantine_per_round else "None"
     return (Path(root) / config.loss_type /
             f"honest_{config.honest_per_round}" / config.algorithm /
@@ -57,7 +57,7 @@ def output_path(root: str, config: CollinsCIFAR10Config) -> Path:
 def main():
     args = parse_args()
     if args.rounds != 100:
-        print("[WARN] Collins CIFAR-10 uses 100 rounds.", flush=True)
+        print("[WARN] The reported CIFAR-10 protocol uses 100 rounds.", flush=True)
 
     if args.mode == "clean":
         grid = itertools.product(
@@ -71,7 +71,7 @@ def main():
         byzantine = args.byzantine_per_round
 
     for loss_type, honest, algorithm, aggregator, attack, seed in grid:
-        config = CollinsCIFAR10Config(
+        config = CIFAR10Config(
             algorithm=algorithm,
             rounds=args.rounds,
             honest_per_round=honest,
@@ -91,12 +91,12 @@ def main():
             print(f"skip {path}", flush=True)
             continue
 
-        # Rebuild the seeded randomized Collins partition for each trial.
-        train, test, _ = load_cifar10_collins(
+        # Rebuild the seeded randomized paper partition for each trial.
+        train, test, _ = load_paper_cifar10(
             100, data_dir=args.data_dir, batch_size=config.batch_size,
             seed=seed)
         print(f"run {path}", flush=True)
-        trainer = CollinsCIFAR10Trainer(config, train, test)
+        trainer = CIFAR10Trainer(config, train, test)
         result = trainer.run()
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_suffix(".tmp")

@@ -1,7 +1,7 @@
 """
 models.py  —  Neural network architectures
 ============================================
-Two-part structure for FedRep:
+Two-part structure for RepresentationLearningTrainer:
   backbone  :  shared across clients (aggregated by server)  → repr_dim vector
   head      :  client-specific linear classifier             → n_classes logits
 
@@ -52,8 +52,8 @@ class CNNBackbone(nn.Module):
         return self.proj(h)
 
 
-class CollinsCIFARBackbone(nn.Module):
-    """Representation layers of the five-layer CNN released with FedRep."""
+class CIFAR10Backbone(nn.Module):
+    """Representation layers of the five-layer CNN released with RepresentationLearningTrainer."""
     def __init__(self):
         super().__init__()
         self.repr_dim = 64
@@ -112,7 +112,7 @@ class LinearHead(nn.Module):
 # ── Combined model (used by the baseline) ────────────────────────────────────
 
 class FedModel(nn.Module):
-    """backbone + head joined — used both by baseline FL and FedRep clients."""
+    """backbone + head joined — used both by baseline FL and RepresentationLearningTrainer clients."""
     def __init__(self, backbone: nn.Module, head: nn.Module):
         super().__init__()
         self.backbone = backbone
@@ -130,8 +130,8 @@ class FedModel(nn.Module):
 def build_backbone(dataset: str, repr_dim: int, linear: bool = False) -> nn.Module:
     from core.datasets import DATASET_META
     meta = DATASET_META[dataset]
-    if dataset == "cifar10_collins" and not linear:
-        return CollinsCIFARBackbone()
+    if dataset == "cifar10_paper" and not linear:
+        return CIFAR10Backbone()
     if dataset in ("cifar10", "cifar100", "femnist", "isic2019"):
         if linear:
             return LinearBackbone(meta["dim"], repr_dim)
@@ -145,7 +145,7 @@ def build_backbone(dataset: str, repr_dim: int, linear: bool = False) -> nn.Modu
 
 def build_model(dataset: str, repr_dim: int, n_classes: int,
                 linear: bool = False) -> FedModel:
-    if dataset == "cifar10_collins":
+    if dataset == "cifar10_paper":
         repr_dim = 64
     bb   = build_backbone(dataset, repr_dim, linear)
     head = LinearHead(repr_dim, n_classes)

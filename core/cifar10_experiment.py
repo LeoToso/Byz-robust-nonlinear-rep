@@ -1,4 +1,4 @@
-"""Collins et al. CIFAR-10 benchmark and Byzantine-robust extension."""
+"""paper et al. CIFAR-10 benchmark and Byzantine-robust extension."""
 
 from __future__ import annotations
 
@@ -73,8 +73,8 @@ def _local_epochs(model, loader: DataLoader, epochs: int, optimizer,
 
 
 @dataclass(frozen=True)
-class CollinsCIFAR10Config:
-    algorithm: str = "fedrep"
+class CIFAR10Config:
+    algorithm: str = "representation_learning"
     rounds: int = 100
     population_clients: int = 100
     honest_per_round: int = 10
@@ -94,35 +94,35 @@ class CollinsCIFAR10Config:
     loss_type: str = "cross_entropy"
 
 
-class CollinsCIFAR10Trainer:
-    """Collins CIFAR-10 local training with robust aggregation of deltas."""
+class CIFAR10Trainer:
+    """paper CIFAR-10 local training with robust aggregation of deltas."""
 
-    def __init__(self, config: CollinsCIFAR10Config,
+    def __init__(self, config: CIFAR10Config,
                  train_loaders: Sequence[DataLoader],
                  test_loaders: Sequence[DataLoader]):
         self.cfg = config
         random.seed(config.seed)
         np.random.seed(config.seed)
         torch.manual_seed(config.seed)
-        if config.algorithm not in {"fedrep", "fedavg"}:
-            raise ValueError("algorithm must be fedrep or fedavg")
+        if config.algorithm not in {"representation_learning", "baseline"}:
+            raise ValueError("algorithm must be representation_learning or baseline")
         if config.loss_type not in {"cross_entropy", "multiclass_ls"}:
             raise ValueError("loss_type must be cross_entropy or multiclass_ls")
         if config.population_clients != 100:
-            raise ValueError("Collins CIFAR-10 requires 100 honest clients")
+            raise ValueError("paper CIFAR-10 requires 100 honest clients")
         if len(train_loaders) != 100 or len(test_loaders) != 100:
-            raise ValueError("Collins CIFAR-10 requires 100 client loaders")
+            raise ValueError("paper CIFAR-10 requires 100 client loaders")
         if not 1 <= config.honest_per_round <= config.population_clients:
             raise ValueError("invalid honest_per_round")
         if config.byzantine_per_round == 0 and config.aggregator != "Average":
-            raise ValueError("clean Collins replication must use Average")
+            raise ValueError("clean paper replication must use Average")
         if config.byzantine_per_round > 0 and config.aggregator == "Average":
             raise ValueError("robust extension requires a robust aggregator")
 
         self.train_loaders = list(train_loaders)
         self.test_loaders = list(test_loaders)
         self.device = torch.device(config.device)
-        self.global_model = build_model("cifar10_collins", 64, 10).to(self.device)
+        self.global_model = build_model("cifar10_paper", 64, 10).to(self.device)
         initial_head = copy.deepcopy(self.global_model.head.state_dict())
         self.client_heads = [copy.deepcopy(initial_head) for _ in range(100)]
         self.criterion = TaskObjective("classification", config.loss_type, 10)
@@ -156,18 +156,18 @@ class CollinsCIFAR10Trainer:
             replace=False,
         )
         shared_params = (list(self.global_model.backbone.parameters())
-                         if self.cfg.algorithm == "fedrep"
+                         if self.cfg.algorithm == "representation_learning"
                          else list(self.global_model.parameters()))
         shared_before = _flat(shared_params)
         deltas, weights, losses = [], [], []
 
         for client in chosen.tolist():
             local = copy.deepcopy(self.global_model)
-            if self.cfg.algorithm == "fedrep":
+            if self.cfg.algorithm == "representation_learning":
                 local.head.load_state_dict(self.client_heads[client])
             optimizer = _optimizer(local, self.cfg.lr, self.cfg.momentum)
 
-            if self.cfg.algorithm == "fedrep":
+            if self.cfg.algorithm == "representation_learning":
                 _set_trainable(local, backbone=False, head=True)
                 _local_epochs(local, self.train_loaders[client],
                               self.cfg.head_epochs, optimizer,
@@ -198,7 +198,7 @@ class CollinsCIFAR10Trainer:
         accuracies, losses = [], []
         for client in range(self.cfg.population_clients):
             model = copy.deepcopy(self.global_model)
-            if self.cfg.algorithm == "fedrep":
+            if self.cfg.algorithm == "representation_learning":
                 model.head.load_state_dict(self.client_heads[client])
             metrics = evaluate_model(
                 model, self.test_loaders[client], self.criterion, self.device)
@@ -245,16 +245,16 @@ class CollinsCIFAR10Trainer:
         final_metric = float(np.mean([r["accuracy"] for r in final_ten]))
         return {
             "format_version": 1,
-            "benchmark": "collins21_cifar10_100_clients_2_classes",
-            "dataset": "cifar10_collins",
+            "benchmark": "paper21_cifar10_100_clients_2_classes",
+            "dataset": "cifar10_paper",
             "population_clients": self.cfg.population_clients,
             "n_clients": (self.cfg.honest_per_round +
                           self.cfg.byzantine_per_round),
             "n_byzantine": self.cfg.byzantine_per_round,
             "alpha": None,
             "loss_type": self.cfg.loss_type,
-            "algorithm": ("fedrep_nonlinear"
-                          if self.cfg.algorithm == "fedrep" else "baseline"),
+            "algorithm": ("representation_learning"
+                          if self.cfg.algorithm == "representation_learning" else "baseline"),
             "aggregator": self.cfg.aggregator,
             "attack": (self.cfg.attack
                        if self.cfg.byzantine_per_round else "None"),
@@ -276,7 +276,7 @@ class CollinsCIFAR10Trainer:
                     for key, value in module.state_dict().items()}
         return {
             "format_version": 1,
-            "benchmark": "collins21_cifar10_100_clients_2_classes",
+            "benchmark": "paper21_cifar10_100_clients_2_classes",
             "config": asdict(self.cfg),
             "global_model_state_dict": cpu_state(self.global_model),
             "client_head_state_dicts": [

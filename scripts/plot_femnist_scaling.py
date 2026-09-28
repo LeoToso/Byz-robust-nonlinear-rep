@@ -24,7 +24,7 @@ def identity(path, obj):
     if h is None:
         m = re.search(r"honest_(10|20|50)", text); h = int(m.group(1)) if m else None
     method = obj.get("algorithm") or obj.get("config", {}).get("algorithm")
-    if method == "baseline": method = "fedavg"
+    if method == "baseline": method = "baseline"
     agg = obj.get("aggregator") or obj.get("config", {}).get("aggregator")
     attack = obj.get("attack") or obj.get("config", {}).get("attack")
     return h, method, agg, attack

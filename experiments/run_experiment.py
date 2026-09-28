@@ -1,7 +1,7 @@
 """
 run_experiment.py  —  Run one (dataset, config) experiment
 ===========================================================
-Trains either baseline adversarial FL or nonlinear adversarial FedRep
+Trains either baseline adversarial FL or nonlinear adversarial RepresentationLearningTrainer
 for a fixed number of rounds, records per-round metrics, and returns an
 ExperimentResult object.
 """
@@ -16,8 +16,8 @@ from typing import List, Optional
 
 from core.datasets    import get_loaders, DATASET_META, heterogeneity_score
 from core.aggregators import RobustAggregator, ByzantineAttack
-from core.fed_baseline import FedBaseline
-from core.fed_fedrep   import FedRep
+from core.baseline import BaselineTrainer
+from core.representation_learning   import RepresentationLearningTrainer
 from evaluation.metrics import ExperimentResult, RoundRecord, Timer
 
 
@@ -35,7 +35,7 @@ def run_experiment(
     n_clients:   int,
     n_byzantine: int,
     # ── algorithm ─────────────────────────────────────────
-    algorithm:   str,   # "baseline" | "fedrep_nonlinear"
+    algorithm:   str,   # "baseline" | "representation_learning"
     aggregator:  str,
     attack:      str,
     loss_type:   str   = "cross_entropy",
@@ -140,15 +140,15 @@ def run_experiment(
         print(f"  [4/4] Building model ({algorithm}) ...", flush=True)
 
     if algorithm == "baseline":
-        trainer = FedBaseline(
+        trainer = BaselineTrainer(
             dataset=dataset, n_clients=n_clients, n_byzantine=n_byzantine,
             aggregator=agg, attack=atk, repr_dim=repr_dim,
             lr=lr, momentum=momentum, linear=False,
             device=str(device_obj), loss_type=loss_type,
         )
         trainer.client_test_loaders = client_test_loaders
-    elif algorithm == "fedrep_nonlinear":
-        trainer = FedRep(
+    elif algorithm == "representation_learning":
+        trainer = RepresentationLearningTrainer(
             dataset=dataset, n_clients=n_clients, n_byzantine=n_byzantine,
             aggregator=agg, attack=atk, repr_dim=repr_dim,
             lr_backbone=lr, lr_head=lr_head, head_steps=head_steps,

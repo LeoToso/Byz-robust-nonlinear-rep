@@ -1,4 +1,4 @@
-"""Collins et al. (ICML 2021) FEMNIST benchmark and robust extension.
+"""Paper FEMNIST benchmark and robust extension.
 
 This module intentionally keeps the benchmark's *population* of persistent
 client heads separate from the messages received in a communication round.
@@ -38,8 +38,8 @@ class ArrayDataset(Dataset):
         return self.x[index], self.y[index]
 
 
-def load_collins_partition(path: str | os.PathLike) -> Tuple[List[Dataset], List[Dataset], dict]:
-    """Load a partition produced by ``prepare_collins_femnist.py``."""
+def load_femnist_partition(path: str | os.PathLike) -> Tuple[List[Dataset], List[Dataset], dict]:
+    """Load a partition produced by ``prepare_femnist.py``."""
     root = Path(path)
     archive = np.load(root / "partition.npz")
     with (root / "metadata.json").open() as stream:
@@ -60,7 +60,7 @@ def load_collins_partition(path: str | os.PathLike) -> Tuple[List[Dataset], List
     return train, test, metadata
 
 
-class CollinsMLP(nn.Module):
+class FEMNISTMLP(nn.Module):
     """Official 784-512-256-64 representation and local 64-10 head."""
 
     def __init__(self, official_softmax_ce: bool = True):
@@ -106,7 +106,7 @@ def _optimizer(model: nn.Module, lr: float, momentum: float):
     )
 
 
-def _set_trainable(model: CollinsMLP, *, representation: bool, head: bool) -> None:
+def _set_trainable(model: FEMNISTMLP, *, representation: bool, head: bool) -> None:
     for parameter in model.representation.parameters():
         parameter.requires_grad_(representation)
     for parameter in model.head.parameters():
@@ -114,7 +114,7 @@ def _set_trainable(model: CollinsMLP, *, representation: bool, head: bool) -> No
 
 
 def _local_epochs(
-    model: CollinsMLP,
+    model: FEMNISTMLP,
     dataset: Dataset,
     epochs: int,
     optimizer: torch.optim.Optimizer,
@@ -142,7 +142,7 @@ def _local_epochs(
 
 
 @torch.no_grad()
-def _evaluate(model: CollinsMLP, dataset: Dataset, batch_size: int,
+def _evaluate(model: FEMNISTMLP, dataset: Dataset, batch_size: int,
               criterion: nn.Module, device: torch.device) -> Tuple[float, float]:
     model.eval()
     correct = total = 0
@@ -158,8 +158,8 @@ def _evaluate(model: CollinsMLP, dataset: Dataset, batch_size: int,
 
 
 @dataclass(frozen=True)
-class CollinsConfig:
-    algorithm: str = "fedrep"
+class FEMNISTConfig:
+    algorithm: str = "representation_learning"
     rounds: int = 200
     population_clients: int = 150
     honest_per_round: int = 15
@@ -177,20 +177,20 @@ class CollinsConfig:
     seed: int = 42
     device: str = "cpu"
     loss_type: str = "cross_entropy"
-    official_softmax_ce: bool = True
+    official_softmax_ce: bool = False
 
 
-class CollinsFEMNISTTrainer:
-    """Clean FedRep reproduction plus an explicitly labelled robust extension."""
+class FEMNISTTrainer:
+    """Clean RepresentationLearningTrainer reproduction plus an explicitly labelled robust extension."""
 
-    def __init__(self, config: CollinsConfig, train_sets: Sequence[Dataset],
+    def __init__(self, config: FEMNISTConfig, train_sets: Sequence[Dataset],
                  test_sets: Sequence[Dataset]):
         self.cfg = config
         random.seed(config.seed)
         np.random.seed(config.seed)
         torch.manual_seed(config.seed)
-        if config.algorithm not in {"fedrep", "fedavg"}:
-            raise ValueError("algorithm must be fedrep or fedavg")
+        if config.algorithm not in {"representation_learning", "baseline"}:
+            raise ValueError("algorithm must be representation_learning or baseline")
         if config.loss_type not in {"cross_entropy", "multiclass_ls"}:
             raise ValueError(
                 "loss_type must be cross_entropy or multiclass_ls")
@@ -199,7 +199,7 @@ class CollinsFEMNISTTrainer:
         if not 1 <= config.honest_per_round <= config.population_clients:
             raise ValueError("invalid honest_per_round")
         if config.byzantine_per_round == 0 and config.aggregator != "Average":
-            raise ValueError("clean Collins replication must use Average")
+            raise ValueError("clean paper replication must use Average")
         if config.byzantine_per_round > 0 and config.aggregator == "Average":
             raise ValueError("robust extension requires a robust aggregator")
 
@@ -210,7 +210,7 @@ class CollinsFEMNISTTrainer:
             if config.loss_type == "cross_entropy"
             else False
         )
-        self.global_model = CollinsMLP(use_softmax).to(self.device)
+        self.global_model = FEMNISTMLP(use_softmax).to(self.device)
         initial_head = copy.deepcopy(self.global_model.head.state_dict())
         self.client_heads = [copy.deepcopy(initial_head)
                              for _ in range(config.population_clients)]
@@ -240,7 +240,7 @@ class CollinsFEMNISTTrainer:
     def train_round(self, round_number: int) -> float:
         chosen = self.rng.choice(self.cfg.population_clients,
                                  self.cfg.honest_per_round, replace=False)
-        if self.cfg.algorithm == "fedrep":
+        if self.cfg.algorithm == "representation_learning":
             shared_params = list(self.global_model.representation.parameters())
         else:
             shared_params = list(self.global_model.parameters())
@@ -249,13 +249,13 @@ class CollinsFEMNISTTrainer:
 
         for client in chosen.tolist():
             local = copy.deepcopy(self.global_model)
-            if self.cfg.algorithm == "fedrep":
+            if self.cfg.algorithm == "representation_learning":
                 local.head.load_state_dict(self.client_heads[client])
             optimizer = _optimizer(local, self.cfg.lr, self.cfg.momentum)
             generator = torch.Generator().manual_seed(
                 self.cfg.seed * 1_000_003 + round_number * 10_007 + client)
 
-            if self.cfg.algorithm == "fedrep":
+            if self.cfg.algorithm == "representation_learning":
                 _set_trainable(local, representation=False, head=True)
                 _local_epochs(local, self.train_sets[client], self.cfg.head_epochs,
                               optimizer, self.criterion, self.cfg.batch_size,
@@ -286,14 +286,14 @@ class CollinsFEMNISTTrainer:
         accuracies, losses = [], []
         for client in range(self.cfg.population_clients):
             model = copy.deepcopy(self.global_model)
-            if self.cfg.algorithm == "fedrep":
+            if self.cfg.algorithm == "representation_learning":
                 model.head.load_state_dict(self.client_heads[client])
             accuracy, loss = _evaluate(model, self.test_sets[client],
                                        self.cfg.batch_size, self.criterion,
                                        self.device)
             accuracies.append(accuracy)
             losses.append(loss)
-        # Collins et al. use an unweighted mean of local client accuracies.
+        # paper et al. use an unweighted mean of local client accuracies.
         return float(np.mean(accuracies)), float(np.mean(losses))
 
     def run(self) -> dict:
@@ -332,15 +332,15 @@ class CollinsFEMNISTTrainer:
         final_metric = float(np.mean([r["accuracy"] for r in final_ten]))
         return {
             "format_version": 1,
-            "benchmark": "collins21_femnist_letters",
-            "dataset": "femnist_collins",
+            "benchmark": "paper21_femnist_letters",
+            "dataset": "femnist_partition",
             "population_clients": self.cfg.population_clients,
             "n_clients": (self.cfg.honest_per_round +
                           self.cfg.byzantine_per_round),
             "n_byzantine": self.cfg.byzantine_per_round,
             "alpha": None,
             "loss_type": self.cfg.loss_type,
-            "algorithm": ("fedrep_nonlinear" if self.cfg.algorithm == "fedrep"
+            "algorithm": ("representation_learning" if self.cfg.algorithm == "representation_learning"
                           else "baseline"),
             "aggregator": self.cfg.aggregator,
             "attack": (self.cfg.attack if self.cfg.byzantine_per_round else "None"),
@@ -363,7 +363,7 @@ class CollinsFEMNISTTrainer:
         ]
         return {
             "format_version": 1,
-            "benchmark": "collins21_femnist_letters",
+            "benchmark": "paper21_femnist_letters",
             "config": asdict(self.cfg),
             "global_model_state_dict": {
                 key: value.detach().cpu()

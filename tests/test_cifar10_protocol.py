@@ -5,23 +5,23 @@ torch = pytest.importorskip("torch")
 
 from torch.utils.data import DataLoader, TensorDataset
 
-from core.collins_cifar10 import _local_epochs
-from core.datasets import collins_cifar10_class_pairs
+from core.cifar10_experiment import _local_epochs
+from core.datasets import cifar10_class_pairs
 from core.models import build_model
 
 
-def test_collins_cifar10_random_shards_are_balanced_and_distinct():
-    pairs = collins_cifar10_class_pairs(seed=42)
+def test_paper_cifar10_random_shards_are_balanced_and_distinct():
+    pairs = cifar10_class_pairs(seed=42)
     labels = np.asarray(pairs)
     assert labels.shape == (100, 2)
     assert np.all(labels[:, 0] != labels[:, 1])
     assert np.bincount(labels.reshape(-1), minlength=10).tolist() == [20] * 10
-    assert pairs == collins_cifar10_class_pairs(seed=42)
-    assert pairs != collins_cifar10_class_pairs(seed=123)
+    assert pairs == cifar10_class_pairs(seed=42)
+    assert pairs != cifar10_class_pairs(seed=123)
 
 
-def test_collins_cifar10_model_has_released_five_layer_split():
-    model = build_model("cifar10_collins", repr_dim=999, n_classes=10)
+def test_paper_cifar10_model_has_released_five_layer_split():
+    model = build_model("cifar10_paper", repr_dim=999, n_classes=10)
     assert model.backbone.repr_dim == 64
     assert model.backbone.conv1.in_channels == 3
     assert model.backbone.conv1.out_channels == 64
