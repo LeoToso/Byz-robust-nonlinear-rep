@@ -6,7 +6,8 @@ while keeping a personalized linear head for every client. The baseline
 robustly aggregates updates to one common model.
 
 - [Paper](paper/byzantine_robust_federated_representation_learning.pdf)
-
+  
+[![FEMNIST accuracy under the Mimic attack](figures/femnist_cross_entropy.png)](figures/femnist_cross_entropy.pdf)
 
 ## Installation
 
