@@ -1,12 +1,12 @@
 # Byzantine-Robust Federated Representation Learning
 
-Code and artifacts for **Byzantine-Robust Federated Representation Learning**.
-The method learns a shared nonlinear representation through robust aggregation
-while retaining a personalized linear head for every client. The baseline
+Code for **Byzantine-Robust Federated Representation Learning**.
+Our approach learns a shared nonlinear representation through robust aggregation
+while keeping a personalized linear head for every client. The baseline
 robustly aggregates updates to one common model.
 
 - [Paper](paper/byzantine_robust_federated_representation_learning.pdf)
-- [FEMNIST client-scaling figure](figures/femnist_cross_entropy.pdf)
+
 
 ## Installation
 
